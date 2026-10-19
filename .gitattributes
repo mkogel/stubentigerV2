@@ -1,0 +1,2 @@
+# Shell scripts run under sh on Windows (Claude Code hooks) and Linux: keep LF.
+*.sh text eol=lf

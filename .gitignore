@@ -1,1 +1,44 @@
+# Private-data deny-list: this repo is public. See CLAUDE.md, "Public repo".
+# scripts/privacy_check.py and the Claude Code guard also reject these paths
+# when they are force-added, so keep every private pattern in this file.
+
+# Secrets: keys, tokens, env files (Wi-Fi credentials live in an untracked env file on the Pi)
+.env*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+*.token
+secrets/
+credentials*.json
+
+# The home: SLAM maps, recordings, audio, camera captures
+maps/
+*.pgm
+*.mcap
+*.db3
+*.bag
+rosbag2_*/
+*.wav
+*.flac
+captures/
+recordings/
+
+# Source photos of the robot and home; only curated, metadata-free images get committed
 setup-images/
+
+# colcon workspace output and vcs-imported sources
+build/
+install/
+log/
+src/external/
+
+# Tooling
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+.pio/

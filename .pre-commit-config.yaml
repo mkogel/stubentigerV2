@@ -1,0 +1,16 @@
+# The single lint source, run locally and as the first CI job.
+# Install once per clone: `pre-commit install`. See CLAUDE.md, "Public repo".
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        args: [--ignore-gitleaks-allow]
+
+  - repo: local
+    hooks:
+      - id: privacy-check
+        name: deny-listed paths and image metadata
+        entry: python scripts/privacy_check.py
+        language: python
+        types: [file]

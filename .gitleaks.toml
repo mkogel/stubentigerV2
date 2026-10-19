@@ -1,0 +1,82 @@
+# gitleaks config: the default secret rules plus this repo's private-data rules.
+# Used by pre-commit, CI and the Claude Code guard (.claude/hooks/guard.py).
+# See CLAUDE.md, "Public repo". A false positive goes into .gitleaksignore
+# (by fingerprint) in a reviewed PR, never as an inline gitleaks:allow.
+
+title = "stubentiger"
+
+[extend]
+useDefault = true
+
+# --- Wi-Fi credentials -------------------------------------------------------
+
+[[rules]]
+id = "wifi-credential"
+description = "Wi-Fi SSID or passphrase (wpa_supplicant, env files, YAML)"
+regex = '''(?i)\b(?:ssid|psk|wpa[_-]?passphrase|wifi[_-]?(?:password|pass|key|name)|wlan[_-]?(?:password|pass|key|name))\b["']?[ \t]*[:=][ \t]*["']?([^\s"'#,;]+)'''
+secretGroup = 1
+keywords = ["ssid", "psk", "passphrase", "wifi", "wlan"]
+
+[[rules.allowlists]]
+description = "Placeholders and variable references"
+regexTarget = "secret"
+regexes = ['''^(?:\$|<|\{|%|\[|example|changeme|placeholder|your[_-]|x{3,}|\*{3,})''']
+
+[[rules]]
+id = "wifi-netplan-access-point"
+description = "Wi-Fi SSID as a netplan access-points key"
+regex = '''access-points:\s*["']?([^\s"':{}$<][^"'\n:]*)["']?\s*:'''
+secretGroup = 1
+keywords = ["access-points"]
+
+# --- Public IPv4 addresses ---------------------------------------------------
+
+[[rules]]
+id = "public-ipv4"
+description = "Public IPv4 address (private LAN, loopback, multicast and documentation ranges are fine)"
+regex = '''(?:^|[^\w.-])((?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})(?:[^\w.-]|\.[^\w]|\.?$)'''
+secretGroup = 1
+
+[[rules.allowlists]]
+description = "Four-part version numbers (WSL kernels and the like): a release keyword near the number"
+regexTarget = "line"
+regexes = [
+  '''(?i)\b(?:kernel|wsl|version|release|firmware|driver|update|build)\b[^\n]{0,60}\d+\.\d+\.\d+\.\d+''',
+  '''(?i)\d+\.\d+\.\d+\.\d+[^\n]{0,20}\b(?:kernel|wsl|version|release)\b''',
+]
+
+[[rules.allowlists]]
+description = "Private, loopback, link-local, CGNAT, multicast, broadcast, documentation and public DNS"
+regexTarget = "secret"
+regexes = [
+  '''^(?:0|10|127)\.''',
+  '''^169\.254\.''',
+  '''^172\.(?:1[6-9]|2\d|3[01])\.''',
+  '''^192\.168\.''',
+  '''^100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.''',
+  '''^(?:22[4-9]|23\d|24\d|25[0-5])\.''',
+  '''^192\.0\.2\.''',
+  '''^198\.51\.100\.''',
+  '''^203\.0\.113\.''',
+  '''^198\.1[89]\.''',
+  '''^(?:1\.1\.1\.1|1\.0\.0\.1|8\.8\.8\.8|8\.8\.4\.4|9\.9\.9\.9)$''',
+]
+
+# --- Email addresses ---------------------------------------------------------
+
+[[rules]]
+id = "email-address"
+description = "Email address other than a noreply, example or local-host address"
+regex = '''(?:^|[^\w.%+-])([a-zA-Z0-9._%+-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,})\b'''
+secretGroup = 1
+keywords = ["@"]
+
+[[rules.allowlists]]
+description = "noreply, example domains, local hostnames, git remotes"
+regexTarget = "secret"
+regexes = [
+  '''(?i)no-?reply''',
+  '''(?i)@(?:[\w-]+\.)*example\.(?:com|org|net)$''',
+  '''(?i)\.(?:local|lan|internal|home\.arpa|invalid|test)$''',
+  '''(?i)^git@''',
+]
