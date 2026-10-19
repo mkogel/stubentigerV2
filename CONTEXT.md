@@ -30,3 +30,25 @@ The default Teleop speed mode, matching the indoor speed of autonomous driving.
 **Turbo**:
 The fast Teleop speed mode, active only while its button is held; releasing it drops back to Normal or stops the robot.
 _Avoid_: Boost, fast mode
+
+### Safety
+
+**Trip**:
+The motor controller stopping the motors on its own, without the Pi, because one of its safety conditions fired: no command for too long, a stalled track, a driver fault or a Cut-off.
+_Avoid_: Fault stop, emergency stop
+
+**Re-arm**:
+After a Trip, the robot drives again only once it has been told to stand still first; a command that was in flight before the Trip never resumes on its own.
+_Avoid_: Reset, clear
+
+**Motor switch**:
+The physical switch that cuts power to the motors, independent of all software; the robot's hard stop.
+_Avoid_: Kill switch, power switch
+
+**Battery warning**:
+The motor battery running low enough that the driver is told to finish up; the robot still drives.
+_Avoid_: Low battery alarm
+
+**Cut-off**:
+The motor battery running so low that the motor controller stops the motors to protect it; the robot stays stopped until the Motor switch is turned off and on again.
+_Avoid_: Undervoltage shutdown, brown-out
