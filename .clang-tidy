@@ -1,0 +1,14 @@
+# Run by scripts/clang_tidy.sh on compile_commands.json from `colcon build`.
+---
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  clang-analyzer-*,
+  performance-*,
+  modernize-use-override,
+  modernize-use-nullptr,
+  modernize-use-emplace,
+  readability-braces-around-statements
+WarningsAsErrors: "*"
+HeaderFilterRegex: ".*/(src|sim)/stubentiger_.*"

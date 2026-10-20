@@ -18,6 +18,37 @@ The guard has four layers; never work around one:
 
 When a check blocks you: remove the private data and rewrite the commit, or describe it generically ("the home Wi-Fi", "a public IP"). A real false positive goes into `.gitleaksignore` (by fingerprint) or the deny-list in `.gitignore`, in a PR Max reviews. Never add inline `gitleaks:allow`, never use `--no-verify`, never edit the hook to get past it. Tests: `python -m unittest discover -s scripts/tests`.
 
+## Build and test
+
+Work inside the devcontainer (`.devcontainer/`, image `ghcr.io/mkogel/stubentiger-dev:jazzy`); it has the whole toolchain. The laptop setup is in `docs/dev-setup.md`. The repo root is the colcon workspace: `src/` may run on the robot, `sim/` is laptop-only, and `src/` never depends on `sim/`.
+
+These are the commands CI runs (`.github/workflows/ci.yml`), from the repo root:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+
+# Build (CI adds ccache and -Werror)
+colcon build --base-paths src sim --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+# Test
+colcon test --base-paths src sim
+colcon test-result --verbose
+
+# Static checks, after the build
+bash scripts/clang_tidy.sh    # clang-tidy from build/*/compile_commands.json
+bash scripts/mypy.sh          # mypy on the stubentiger_* modules
+
+# Lint: the single lint source (ruff, clang-format, xmllint, yamllint, whitespace, gitleaks)
+pre-commit run --all-files
+
+# Repo script tests (privacy guard, CI gate)
+python3 -m unittest discover -s scripts/tests
+```
+
+The robot profile (`robot-arm64` job, as on the Pi) builds and tests `src/` only, on plain `ros:jazzy-ros-base`: `rosdep install --from-paths src --ignore-src -y`, then the build and test commands with `--base-paths src`.
+
+CI has one required check, `ci`, which passes only when every other job passed. A new job joins it by being added to the `needs` of the `ci` job. Actions are pinned to full commit SHAs; Dependabot proposes updates. A new tool for the toolchain goes into `.devcontainer/Dockerfile`: a PR that changes `.devcontainer/` builds and tests against its own image.
+
 ## Agent skills
 
 ### Issue tracker

@@ -1,0 +1,36 @@
+// Runs on docker-ce inside the Ubuntu WSL2 distro, never Docker Desktop. See docs/dev-setup.md.
+{
+  "name": "Stubentiger (Jazzy)",
+  "image": "ghcr.io/mkogel/stubentiger-dev:jazzy",
+  "remoteUser": "ubuntu",
+  "runArgs": [
+    // Host networking: DDS discovery and foxglove_bridge reach the laptop directly.
+    "--network=host",
+    // The Xbox receiver's xpad devices (input major 13) from the custom WSL kernel.
+    "--device-cgroup-rule=c 13:* rmw",
+    // WSLg GPU passthrough.
+    "--device=/dev/dxg"
+  ],
+  "mounts": [
+    "source=/dev/input,target=/dev/input,type=bind",
+    "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
+    "source=/mnt/wslg,target=/mnt/wslg,type=bind",
+    "source=/usr/lib/wsl,target=/usr/lib/wsl,type=bind,readonly"
+  ],
+  "containerEnv": {
+    "DISPLAY": "${localEnv:DISPLAY}",
+    "WAYLAND_DISPLAY": "${localEnv:WAYLAND_DISPLAY}",
+    "XDG_RUNTIME_DIR": "/mnt/wslg/runtime-dir",
+    "PULSE_SERVER": "/mnt/wslg/PulseServer",
+    "LD_LIBRARY_PATH": "/usr/lib/wsl/lib",
+    // Mesa renders through d3d12 on the NVIDIA adapter, not the integrated GPU.
+    "GALLIUM_DRIVER": "d3d12",
+    "MESA_D3D12_DEFAULT_ADAPTER_NAME": "NVIDIA"
+  },
+  // The Claude Code CLI comes only through this feature, never the image.
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {},
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
+  },
+  "postCreateCommand": "pre-commit install"
+}
