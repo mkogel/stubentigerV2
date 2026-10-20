@@ -11,7 +11,7 @@ The simulated robot driven by an Xbox 360 controller with dead-man button and No
 _Avoid_: Sim demo, prototype
 
 **Physical MVP**:
-The real robot driven by an Xbox 360 controller with the same Teleop behaviour as the Virtual MVP, plus a hardware watchdog stop, battery undervoltage protection, and a power-on sequence that shows when the Motor switch may be turned on.
+The real robot driven by an Xbox 360 controller with the same Teleop behaviour as the Virtual MVP, plus a hardware watchdog stop, battery undervoltage protection, and a power-on sequence that shows when the robot is ready to drive.
 _Avoid_: Hardware MVP, first drive
 
 ### Driving
@@ -52,3 +52,17 @@ _Avoid_: Low battery alarm
 **Cut-off**:
 The motor battery running so low that the motor controller stops the motors to protect it; the robot stays stopped until the Motor switch is turned off and on again.
 _Avoid_: Undervoltage shutdown, brown-out
+
+### Power-up
+
+**Ready**:
+The robot can drive the moment the Dead-man button is held: its motor controller answers, nothing has tripped it for good, and the controller is connected. The Motor switch is not part of it.
+_Avoid_: Armed, online
+
+**Startup LED**:
+The front light that says whether the robot is starting, Ready, or stuck with a fault that waiting won't fix.
+_Avoid_: Status LED, ready LED
+
+**Power LED**:
+The front light that says the robot's computer has power, blinks when a battery runs low, and goes dark once it is safe to switch off.
+_Avoid_: Battery LED
