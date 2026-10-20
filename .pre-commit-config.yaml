@@ -1,5 +1,7 @@
-# The single lint source, run locally and as the first CI job.
-# Install once per clone: `pre-commit install`. See CLAUDE.md, "Public repo".
+# The single lint source, run locally and as the `lint` CI job.
+# Install once per clone: `pre-commit install`. See CLAUDE.md, "Public repo" and "Build and test".
+# xmllint is a system hook: it comes with the dev image, so commit XML from the devcontainer.
+
 repos:
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1
@@ -14,3 +16,38 @@ repos:
         entry: python scripts/privacy_check.py
         language: python
         types: [file]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # Leave the binary STL meshes alone.
+      - id: trailing-whitespace
+        exclude: \.stl$
+      - id: end-of-file-fixer
+        exclude: \.stl$
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.1
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v18.1.8 # the clang-format of Ubuntu 24.04, as in the dev image
+    hooks:
+      - id: clang-format
+        types_or: [c, c++]
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+        args: [--strict]
+
+  - repo: local
+    hooks:
+      - id: xmllint
+        name: xmllint (package.xml, xacro, URDF, SDF, launch XML)
+        entry: xmllint --noout
+        language: system
+        types: [xml]

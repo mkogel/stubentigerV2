@@ -1,0 +1,233 @@
+# One workflow, one required check: branch protection on main requires `ci` only.
+# No path filters, so the required check never hangs as pending. A new job joins
+# the gate by being added to the `needs` of the `ci` job, nothing more.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 3 * * 1" # weekly: rebuild the dev image from scratch and run the full CI on main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A PR's new push cancels its old run; main and weekly runs never cancel each other.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/stubentiger-dev
+
+jobs:
+  # The dev image is tagged by the git tree hash of .devcontainer/, so a PR that changes
+  # the definition builds and tests against its own image, and an unchanged one reuses it.
+  # Only main moves the `jazzy` tag.
+  image-build:
+    name: image-build (${{ matrix.arch }})
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: tag
+        run: echo "tag=jazzy-$(git rev-parse HEAD:.devcontainer | cut -c1-12)" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: need
+        name: Decide whether to build
+        env:
+          REF: ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}-${{ matrix.arch }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = schedule ] || [ "$EVENT" = workflow_dispatch ]; then
+            echo "Scheduled or manual run: rebuilding $REF"; echo "build=true" >> "$GITHUB_OUTPUT"
+          elif docker manifest inspect "$REF" > /dev/null 2>&1; then
+            echo "$REF exists: reusing it"; echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$REF is missing: building it"; echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Free disk space for the image
+        if: steps.need.outputs.build == 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL
+      - if: steps.need.outputs.build == 'true'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - if: steps.need.outputs.build == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .devcontainer
+          platforms: linux/${{ matrix.arch }}
+          tags: ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}-${{ matrix.arch }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          pull: true
+          push: true
+          provenance: false
+
+  image-manifest:
+    needs: image-build
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    outputs:
+      ref: ${{ env.IMAGE }}:${{ needs.image-build.outputs.tag }}
+    env:
+      TAG: ${{ needs.image-build.outputs.tag }}
+    steps:
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Merge amd64 and arm64 into one manifest
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != schedule ] && [ "$EVENT" != workflow_dispatch ] \
+            && docker manifest inspect "$IMAGE:$TAG" > /dev/null 2>&1; then
+            echo "$IMAGE:$TAG exists: reusing it"
+          else
+            docker buildx imagetools create -t "$IMAGE:$TAG" \
+              "$IMAGE:$TAG-amd64" "$IMAGE:$TAG-arm64"
+          fi
+      - name: One manifest for amd64 and arm64, default user ubuntu
+        run: |
+          docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{json .Image}}' \
+            | jq -e '(keys | sort) == ["linux/amd64", "linux/arm64"]
+                     and all(.[]; .config.User == "ubuntu")'
+      - name: Publish as jazzy
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: docker buildx imagetools create -t "$IMAGE:jazzy" "$IMAGE:$TAG"
+
+  lint:
+    needs: image-manifest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ${{ needs.image-manifest.outputs.ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: pre-commit
+        run: pre-commit run --all-files --show-diff-on-failure
+      # The pre-commit gitleaks hook scans staged changes only, so CI scans every commit.
+      - name: gitleaks over the history
+        run: gitleaks git --redact --verbose --ignore-gitleaks-allow
+
+  build-test:
+    needs: image-manifest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ${{ needs.image-manifest.outputs.ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Dev image contents
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          bash scripts/check_dev_image.sh
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-${{ github.run_id }}
+          restore-keys: ccache-
+      - name: Build src and sim
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          export CCACHE_DIR="$PWD/.ccache"
+          colcon build --base-paths src sim --event-handlers console_cohesion+ \
+            --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+              -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+      - name: Test
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon test --base-paths src sim --event-handlers console_cohesion+
+          colcon test-result --verbose
+      - name: clang-tidy
+        run: bash scripts/clang_tidy.sh
+      - name: mypy
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          bash scripts/mypy.sh
+      - name: Repo script tests (privacy guard, CI gate)
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          python3 -m unittest discover -s scripts/tests
+
+  # The robot profile: src/ only, on a plain Jazzy base, as on the Pi. No Gazebo, no dev image.
+  robot-arm64:
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: ros:jazzy-ros-base
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: rosdep
+        run: |
+          apt-get update
+          rosdep update --rosdistro jazzy
+          rosdep install --from-paths src --ignore-src -y --rosdistro jazzy
+      - name: Build src
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build --base-paths src --event-handlers console_cohesion+
+      - name: Test src
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon test --base-paths src --event-handlers console_cohesion+
+          colcon test-result --verbose
+
+  ci:
+    if: always()
+    needs: [image-build, image-manifest, lint, build-test, robot-arm64]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts/all_jobs_passed.py
+          sparse-checkout-cone-mode: false
+      - name: Every job passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 scripts/all_jobs_passed.py
