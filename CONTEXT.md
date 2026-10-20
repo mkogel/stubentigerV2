@@ -11,7 +11,7 @@ The simulated robot driven by an Xbox 360 controller with dead-man button and No
 _Avoid_: Sim demo, prototype
 
 **Physical MVP**:
-The real robot driven by an Xbox 360 controller with the same Teleop behaviour as the Virtual MVP, plus a hardware watchdog stop and battery undervoltage protection.
+The real robot driven by an Xbox 360 controller with the same Teleop behaviour as the Virtual MVP, plus a hardware watchdog stop, battery undervoltage protection, and a power-on sequence that shows when the Motor switch may be turned on.
 _Avoid_: Hardware MVP, first drive
 
 ### Driving
