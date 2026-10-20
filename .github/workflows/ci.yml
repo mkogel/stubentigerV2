@@ -14,9 +14,10 @@ on:
 permissions:
   contents: read
 
+# A PR's new push cancels its old run; main and weekly runs never cancel each other.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/stubentiger-dev
@@ -80,7 +81,7 @@ jobs:
           push: true
           provenance: false
 
-  image:
+  image-manifest:
     needs: image-build
     runs-on: ubuntu-24.04
     permissions:
@@ -96,21 +97,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Merge amd64 and arm64 into one manifest
+        env:
+          EVENT: ${{ github.event_name }}
         run: |
-          docker buildx imagetools create -t "$IMAGE:$TAG" \
-            "$IMAGE:$TAG-amd64" "$IMAGE:$TAG-arm64"
+          if [ "$EVENT" != schedule ] && [ "$EVENT" != workflow_dispatch ] \
+            && docker manifest inspect "$IMAGE:$TAG" > /dev/null 2>&1; then
+            echo "$IMAGE:$TAG exists: reusing it"
+          else
+            docker buildx imagetools create -t "$IMAGE:$TAG" \
+              "$IMAGE:$TAG-amd64" "$IMAGE:$TAG-arm64"
+          fi
       - name: Publish as jazzy
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: docker buildx imagetools create -t "$IMAGE:jazzy" "$IMAGE:$TAG"
 
   lint:
-    needs: image
+    needs: image-manifest
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: read
     container:
-      image: ${{ needs.image.outputs.ref }}
+      image: ${{ needs.image-manifest.outputs.ref }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -131,13 +139,13 @@ jobs:
         run: gitleaks git --redact --verbose --ignore-gitleaks-allow
 
   build-test:
-    needs: image
+    needs: image-manifest
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: read
     container:
-      image: ${{ needs.image.outputs.ref }}
+      image: ${{ needs.image-manifest.outputs.ref }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -159,7 +167,7 @@ jobs:
           colcon build --base-paths src sim --event-handlers console_cohesion+ \
             --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
               -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-              -DCMAKE_C_FLAGS=-Werror -DCMAKE_CXX_FLAGS=-Werror
+              -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
       - name: Test
         run: |
           source /opt/ros/jazzy/setup.bash
@@ -201,7 +209,7 @@ jobs:
 
   ci:
     if: always()
-    needs: [image-build, image, lint, build-test, robot-arm64]
+    needs: [image-build, image-manifest, lint, build-test, robot-arm64]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -39,7 +39,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Python CLIs in isolated venvs, on the PATH for every user.
 ENV PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin
-RUN pipx install pre-commit && pipx install ruff && pipx install platformio
+# ruff matches the rev in .pre-commit-config.yaml.
+RUN pipx install pre-commit && pipx install ruff==0.17.1 && pipx install platformio
 
 # gitleaks, for the Claude Code guard (.claude/hooks/guard.py); pre-commit brings its own.
 RUN case "${TARGETARCH}" in amd64) arch=x64 ;; arm64) arch=arm64 ;; *) exit 1 ;; esac \
