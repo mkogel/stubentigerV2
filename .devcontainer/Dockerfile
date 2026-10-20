@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       clang-tidy \
       libxml2-utils \
       mesa-utils \
-      python3-mypy \
+      mypy \
       pipx \
       git \
       sudo \
