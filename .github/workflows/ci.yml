@@ -107,6 +107,11 @@ jobs:
             docker buildx imagetools create -t "$IMAGE:$TAG" \
               "$IMAGE:$TAG-amd64" "$IMAGE:$TAG-arm64"
           fi
+      - name: One manifest for amd64 and arm64, default user ubuntu
+        run: |
+          docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{json .Image}}' \
+            | jq -e '(keys | sort) == ["linux/amd64", "linux/arm64"]
+                     and all(.[]; .config.User == "ubuntu")'
       - name: Publish as jazzy
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: docker buildx imagetools create -t "$IMAGE:jazzy" "$IMAGE:$TAG"
@@ -155,6 +160,10 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Dev image contents
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          bash scripts/check_dev_image.sh
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .ccache
