@@ -180,7 +180,9 @@ jobs:
           source /opt/ros/jazzy/setup.bash
           bash scripts/mypy.sh
       - name: Repo script tests (privacy guard, CI gate)
-        run: python3 -m unittest discover -s scripts/tests
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          python3 -m unittest discover -s scripts/tests
 
   # The robot profile: src/ only, on a plain Jazzy base, as on the Pi. No Gazebo, no dev image.
   robot-arm64:
