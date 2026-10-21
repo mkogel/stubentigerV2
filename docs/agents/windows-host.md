@@ -22,6 +22,10 @@ cat script.sh | MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu-24.04 -e docker exec -i -u 
 
 A script in the container starts with `source /opt/ros/jazzy/setup.bash`.
 
+## Build, test, lint and commit
+
+The devcontainer workspace is Max's own WSL clone, often on another branch: leave it alone. Run builds, tests, `pre-commit` and commits in a throwaway dev-image container on a WSL copy of this checkout, with `scripts/dev-image-run.sh` (usage in its header). A commit made there is fetched back into this checkout before the next run. Windows has no `xmllint`, so the pre-commit hook only passes there.
+
 ## Windows-side tools
 
 - `usbipd` is at `C:\Program Files\usbipd-win\usbipd.exe` and may be missing from `PATH` in an older shell. `list` and `attach` work without admin rights.
