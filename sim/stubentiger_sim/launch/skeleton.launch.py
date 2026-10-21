@@ -8,7 +8,11 @@ with the full sim.launch.py.
 """
 
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, RegisterEventHandler
+from launch.actions import (
+    AppendEnvironmentVariable,
+    IncludeLaunchDescription,
+    RegisterEventHandler,
+)
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, PathJoinSubstitution
@@ -26,7 +30,13 @@ def generate_launch_description() -> LaunchDescription:
     )
     world = PathJoinSubstitution([FindPackageShare("stubentiger_sim"), "worlds", "floor.sdf"])
     robot_description = ParameterValue(
-        Command(["xacro ", xacro_file, " controllers_file:=", controllers]), value_type=str
+        Command(["xacro ", xacro_file, " hardware:=gazebo controllers_file:=", controllers]),
+        value_type=str,
+    )
+    # Gazebo finds package:// meshes on its resource path, as <path>/<package>/<file>.
+    mesh_path = AppendEnvironmentVariable(
+        "GZ_SIM_RESOURCE_PATH",
+        PathJoinSubstitution([FindPackageShare("stubentiger_description"), ".."]),
     )
 
     # Server only, headless; sensors that render use EGL (software rendering without a GPU).
@@ -63,6 +73,7 @@ def generate_launch_description() -> LaunchDescription:
 
     return LaunchDescription(
         [
+            mesh_path,
             gazebo,
             robot_state_publisher,
             spawn,

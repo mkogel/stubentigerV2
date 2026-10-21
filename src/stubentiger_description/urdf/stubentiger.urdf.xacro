@@ -1,15 +1,32 @@
 <?xml version="1.0"?>
 <!--
-  Stubentiger, minimal skeleton: a base box and each track as three floor wheels, the
+  Stubentiger: one model for all three hardware backends. Each track is three floor wheels, the
   middle one commanded and the outer two mimicking it. Values from #24 ("stubentiger_description"),
-  relative to base_footprint (the floor point under the middle floor wheels), x forward, y left.
-  Robot description replaces this with the full model (frames, gpio, meshes, backends).
+  relative to base_footprint (the floor point under the middle floor wheels), x forward, y left,
+  z up. Collision is primitives; visuals are the CAD meshes where they exist, boxes elsewhere.
 
-  Argument:
-    controllers_file  the controller YAML that gz_ros2_control loads; empty leaves the plugin out.
+  Arguments:
+    hardware          gazebo, real or mock: the <ros2_control> backend (stubentiger.ros2_control.xacro).
+    controllers_file  the controller YAML that gz_ros2_control loads (gazebo only); empty leaves the
+                      plugin out.
+    sensors           true adds the sim LiDAR, IMU and camera (stubentiger.sensors.xacro).
+    serial_port       the motor controller's serial port (real only).
+    counts_per_rev    encoder counts per sprocket turn (real only).
 -->
 <robot name="stubentiger" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="hardware" default="mock"/>
   <xacro:arg name="controllers_file" default=""/>
+  <xacro:arg name="sensors" default="false"/>
+  <xacro:arg name="serial_port" default="/dev/arduino"/>
+  <!-- Encoder counts per sprocket turn, 48 per motor turn (#10); calibrated in v0.2.0. -->
+  <xacro:arg name="counts_per_rev" default="979.62"/>
+
+  <xacro:property name="hardware" value="$(arg hardware)"/>
+  <xacro:if value="${hardware not in ['gazebo', 'real', 'mock']}">
+    ${xacro.fatal("hardware must be gazebo, real or mock, not '" + hardware + "'")}
+  </xacro:if>
+
+  <xacro:include filename="stubentiger.ros2_control.xacro"/>
 
   <!-- Geometry, in metres. -->
   <xacro:property name="base_link_z" value="0.027"/>
@@ -23,6 +40,34 @@
   <xacro:property name="chassis_width" value="0.139"/>
   <xacro:property name="chassis_z_min" value="0.055"/>
   <xacro:property name="chassis_z_max" value="0.118"/>
+
+  <!-- The CAD meshes, in millimetres. The cover plate keeps its assembly coordinates (x points
+       backwards, y up): its top plate is centred on x 197.67 and z 67.67 mm, its top at y 63.16 mm.
+       It is placed by eye, centred on the chassis box with its top on the box's top; its front
+       slants down from x 70 mm, so the hull box under it ends there. The sensor plate
+       (90 x 134 x 4 mm) has its origin at a corner and lies on the top, under the LiDAR. -->
+  <xacro:property name="mm" value="0.001"/>
+  <xacro:property name="cover_plate_cad_x_centre" value="0.19767"/>
+  <xacro:property name="cover_plate_cad_z_centre" value="0.06767"/>
+  <xacro:property name="cover_plate_cad_y_top" value="0.06316"/>
+  <xacro:property name="cover_plate_width" value="0.134"/>
+  <xacro:property name="plate_thickness" value="0.004"/>
+  <xacro:property name="sensor_plate_length" value="0.090"/>
+  <xacro:property name="sensor_plate_width" value="0.134"/>
+  <xacro:property name="sensor_plate_top" value="${chassis_z_max + plate_thickness}"/>
+  <xacro:property name="hull_x_max" value="0.070"/>
+
+  <!-- Sensor frames, relative to base_footprint, all level. The LiDAR's yaw stays 0 until
+       bring-up measures it; the IMU's place is a placeholder until it is mounted (#12). -->
+  <xacro:property name="lidar_x" value="0.0295"/>
+  <xacro:property name="lidar_y" value="-0.028"/>
+  <xacro:property name="lidar_z" value="0.165"/>
+  <xacro:property name="lidar_top" value="0.175"/>
+  <xacro:property name="lidar_body_size" value="0.07"/>
+  <xacro:property name="camera_case_size" value="0.025"/>
+  <xacro:property name="imu_z" value="0.118"/>
+  <xacro:property name="camera_x" value="0.1225"/>
+  <xacro:property name="camera_z" value="0.080"/>
 
   <!-- Mass: 2.2 kg in all, centre of mass at x -0.010, z 0.070 above the floor. -->
   <xacro:property name="total_mass" value="2.2"/>
@@ -60,6 +105,12 @@
   <material name="wheel">
     <color rgba="0.15 0.15 0.15 1"/>
   </material>
+  <material name="plate">
+    <color rgba="0.3 0.3 0.3 1"/>
+  </material>
+  <material name="sensor">
+    <color rgba="0.1 0.1 0.1 1"/>
+  </material>
 
   <link name="base_footprint"/>
 
@@ -70,12 +121,38 @@
   </joint>
 
   <link name="base_link">
+    <!-- The cover plate, turned from its CAD axes to x forward, z up. -->
     <visual>
-      <origin xyz="${chassis_x} 0 ${chassis_z}" rpy="0 0 0"/>
+      <origin
+        xyz="${chassis_x + cover_plate_cad_x_centre} ${-cover_plate_cad_z_centre}
+          ${chassis_z_max - cover_plate_cad_y_top - base_link_z}"
+        rpy="${pi / 2} 0 ${pi}"/>
       <geometry>
-        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+        <mesh filename="package://stubentiger_description/meshes/cover_plate.stl"
+          scale="${mm} ${mm} ${mm}"/>
       </geometry>
       <material name="chassis"/>
+    </visual>
+    <!-- The hull under the cover plate, kept inside it and behind its slanted front. -->
+    <visual>
+      <origin xyz="${(chassis_x_min + hull_x_max) / 2} 0 ${chassis_z - plate_thickness / 2}"
+        rpy="0 0 0"/>
+      <geometry>
+        <box size="${hull_x_max - chassis_x_min} ${cover_plate_width - 2 * plate_thickness}
+          ${chassis_height - plate_thickness}"/>
+      </geometry>
+      <material name="plate"/>
+    </visual>
+    <visual>
+      <origin
+        xyz="${lidar_x - sensor_plate_length / 2} ${-sensor_plate_width / 2}
+          ${chassis_z_max - base_link_z}"
+        rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://stubentiger_description/meshes/sensor_plate.stl"
+          scale="${mm} ${mm} ${mm}"/>
+      </geometry>
+      <material name="plate"/>
     </visual>
     <collision>
       <origin xyz="${chassis_x} 0 ${chassis_z}" rpy="0 0 0"/>
@@ -92,6 +169,54 @@
         izz="${chassis_mass * (chassis_length**2 + chassis_width**2) / 12}"/>
     </inertial>
   </link>
+
+  <!-- Sensor frames (REP-105), with boxes for the sensors' bodies. -->
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="${lidar_x} ${lidar_y} ${lidar_z - base_link_z}" rpy="0 0 0"/>
+  </joint>
+  <!-- The RPLIDAR A1 body, from the sensor plate up to the LiDAR's top. -->
+  <link name="lidar_link">
+    <visual>
+      <origin xyz="0 0 ${(lidar_top + sensor_plate_top) / 2 - lidar_z}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${lidar_body_size} ${lidar_body_size} ${lidar_top - sensor_plate_top}"/>
+      </geometry>
+      <material name="sensor"/>
+    </visual>
+  </link>
+
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0 0 ${imu_z - base_link_z}" rpy="0 0 0"/>
+  </joint>
+  <link name="imu_link"/>
+
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <origin xyz="${camera_x} 0 ${camera_z - base_link_z}" rpy="0 0 0"/>
+  </joint>
+  <!-- The camera case, behind its lens. -->
+  <link name="camera_link">
+    <visual>
+      <origin xyz="${-camera_case_size / 2} 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="${camera_case_size} ${camera_case_size} ${camera_case_size}"/>
+      </geometry>
+      <material name="sensor"/>
+    </visual>
+  </link>
+
+  <!-- The camera's optical frame (REP-103): z forward, x right, y down. -->
+  <joint name="camera_optical_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child link="camera_optical_link"/>
+    <origin xyz="0 0 0" rpy="${-pi / 2} 0 ${-pi / 2}"/>
+  </joint>
+  <link name="camera_optical_link"/>
 
   <!-- One floor wheel; mimic is the commanded joint it follows, or empty for a commanded one. -->
   <xacro:macro name="floor_wheel" params="name x y mimic">
@@ -148,28 +273,8 @@
   <xacro:track side="left" y="${wheel_y}"/>
   <xacro:track side="right" y="${-wheel_y}"/>
 
-  <!-- Gazebo backend. The mimic joints are listed here only, with state interfaces:
-       GazeboSimSystem drives them after their commanded joint. -->
-  <ros2_control name="GazeboSimSystem" type="system">
-    <hardware>
-      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
-    </hardware>
-    <xacro:macro name="wheel_interfaces" params="name commanded">
-      <joint name="${name}">
-        <xacro:if value="${commanded}">
-          <command_interface name="velocity"/>
-        </xacro:if>
-        <state_interface name="position"/>
-        <state_interface name="velocity"/>
-      </joint>
-    </xacro:macro>
-    <xacro:wheel_interfaces name="left_wheel_joint" commanded="true"/>
-    <xacro:wheel_interfaces name="left_wheel_2_joint" commanded="false"/>
-    <xacro:wheel_interfaces name="left_wheel_3_joint" commanded="false"/>
-    <xacro:wheel_interfaces name="right_wheel_joint" commanded="true"/>
-    <xacro:wheel_interfaces name="right_wheel_2_joint" commanded="false"/>
-    <xacro:wheel_interfaces name="right_wheel_3_joint" commanded="false"/>
-  </ros2_control>
+  <xacro:stubentiger_ros2_control hardware="${hardware}"
+    serial_port="$(arg serial_port)" counts_per_rev="$(arg counts_per_rev)"/>
 
   <!-- The body's true pose in the world, on Gazebo's /model/stubentiger/pose. Tests judge
        driving on it, never on /odom, which would hide wheel slip. -->
@@ -182,7 +287,11 @@
     </plugin>
   </gazebo>
 
-  <xacro:if value="${'$(arg controllers_file)' != ''}">
+  <xacro:if value="$(arg sensors)">
+    <xacro:include filename="stubentiger.sensors.xacro"/>
+  </xacro:if>
+
+  <xacro:if value="${hardware == 'gazebo' and '$(arg controllers_file)' != ''}">
     <gazebo>
       <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
         <parameters>$(arg controllers_file)</parameters>
