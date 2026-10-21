@@ -180,6 +180,10 @@ class Analyze(unittest.TestCase):
         plan = analyze("gh pr create --title t --body-file body.md")
         self.assertEqual([Path(f).name for f in plan.text_files], ["body.md"])
 
+    def test_unexpanded_variable_in_a_text_file_names_the_fix(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "pass a literal path"):
+            guard.check_text("gh pr create --body-file $P/body.md", ["$P/body.md"])
+
     def test_unparseable_command_falls_back_conservatively(self) -> None:
         plan = analyze("git push --force origin 'x")
         self.assertTrue(plan.blocks)

@@ -363,7 +363,11 @@ def check_text(command: str, files: list[str]) -> list[str]:
     text = command
     for name in files:
         if not os.path.isfile(name):
-            raise RuntimeError(f"cannot read {name} to scan it")
+            # The hook sees the command before the shell expands it.
+            hint = (
+                "; pass a literal path, the guard does not expand variables" if "$" in name else ""
+            )
+            raise RuntimeError(f"cannot read {name} to scan it{hint}")
         text += "\n" + Path(name).read_text(encoding="utf-8", errors="replace")
     return gitleaks("stdin", stdin=text)
 

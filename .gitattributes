@@ -1,3 +1,7 @@
+# Text files are LF in every checkout, Windows included: the linters (yamllint, ruff) reject CRLF,
+# and a copy of a Windows checkout must lint the same as CI. Later lines override this one.
+* text=auto eol=lf
+
 # Shell scripts run under sh on Windows (Claude Code hooks) and Linux: keep LF.
 *.sh text eol=lf
 
