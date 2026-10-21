@@ -1,0 +1,66 @@
+<?xml version="1.0"?>
+<!--
+  The <ros2_control> block, switched on the hardware backend. All three give the controllers the
+  same two commanded joints, so the one controller YAML in stubentiger_bringup fits them all.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="wheel_interfaces" params="name commanded">
+    <joint name="${name}">
+      <xacro:if value="${commanded}">
+        <command_interface name="velocity"/>
+      </xacro:if>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- serial_port and counts_per_rev are parameters of the real backend only. -->
+  <xacro:macro name="stubentiger_ros2_control" params="hardware serial_port counts_per_rev">
+    <ros2_control name="stubentiger" type="system">
+      <hardware>
+        <xacro:if value="${hardware == 'gazebo'}">
+          <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+        </xacro:if>
+        <xacro:if value="${hardware == 'real'}">
+          <plugin>stubentiger_hardware/StubentigerSystem</plugin>
+          <param name="serial_port">${serial_port}</param>
+          <param name="counts_per_rev">${counts_per_rev}</param>
+        </xacro:if>
+        <xacro:if value="${hardware == 'mock'}">
+          <plugin>mock_components/GenericSystem</plugin>
+        </xacro:if>
+      </hardware>
+
+      <xacro:wheel_interfaces name="left_wheel_joint" commanded="true"/>
+      <xacro:wheel_interfaces name="right_wheel_joint" commanded="true"/>
+
+      <!-- The mimic joints only in Gazebo, with state interfaces: GazeboSimSystem drives them
+           after their commanded joint. -->
+      <xacro:if value="${hardware == 'gazebo'}">
+        <xacro:wheel_interfaces name="left_wheel_2_joint" commanded="false"/>
+        <xacro:wheel_interfaces name="left_wheel_3_joint" commanded="false"/>
+        <xacro:wheel_interfaces name="right_wheel_2_joint" commanded="false"/>
+        <xacro:wheel_interfaces name="right_wheel_3_joint" commanded="false"/>
+      </xacro:if>
+
+      <!-- The motor controller's telemetry (#10, "gpio states"). Double-typed, because
+           joint_state_broadcaster and GpioCommandController skip any other type.
+           GazeboSimSystem ignores <gpio>, so Gazebo declares none. -->
+      <xacro:unless value="${hardware == 'gazebo'}">
+        <gpio name="motor_controller">
+          <state_interface name="battery_voltage" data_type="double"/>
+          <state_interface name="motor_current_left" data_type="double"/>
+          <state_interface name="motor_current_right" data_type="double"/>
+          <state_interface name="motor_power" data_type="double"/>
+          <state_interface name="faults" data_type="double"/>
+          <state_interface name="trip_count" data_type="double"/>
+          <state_interface name="last_trip" data_type="double"/>
+          <state_interface name="firmware_sha" data_type="double"/>
+          <state_interface name="protocol_major" data_type="double"/>
+          <state_interface name="protocol_minor" data_type="double"/>
+          <state_interface name="reset_cause" data_type="double"/>
+        </gpio>
+      </xacro:unless>
+    </ros2_control>
+  </xacro:macro>
+</robot>
