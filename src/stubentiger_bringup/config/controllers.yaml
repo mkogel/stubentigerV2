@@ -1,0 +1,37 @@
+# The one controller config for all three backends (gazebo, real, mock); #24, "Controller config".
+# diff_drive_controller's limits are the single robot-wide ceiling: no input can exceed them,
+# and a cmd_vel_timeout stop ramps through them too.
+controller_manager:
+  ros__parameters:
+    update_rate: 50 # Hz, the firmware link rate
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    diff_drive_controller:
+      type: diff_drive_controller/DiffDriveController
+
+diff_drive_controller:
+  ros__parameters:
+    left_wheel_names: [left_wheel_joint]
+    right_wheel_names: [right_wheel_joint]
+    wheel_radius: 0.01966
+    wheel_separation: 0.190
+    wheel_separation_multiplier: 1.0 # calibrated in v0.2.0
+
+    cmd_vel_timeout: 0.5
+    odom_frame_id: odom
+    base_frame_id: base_footprint
+    enable_odom_tf: true
+    publish_rate: 50.0
+
+    # Jazzy names; min_acceleration and the has_*_limits flags are deprecated.
+    # Brakes harder than it accelerates, so stops are short but the tracks don't skid.
+    linear.x.max_velocity: 0.7
+    linear.x.min_velocity: -0.7
+    linear.x.max_acceleration: 1.0
+    linear.x.max_deceleration: -2.0
+    angular.z.max_velocity: 2.5
+    angular.z.min_velocity: -2.5
+    angular.z.max_acceleration: 4.0
+    angular.z.max_deceleration: -8.0
