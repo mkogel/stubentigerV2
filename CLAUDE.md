@@ -47,6 +47,8 @@ python3 -m unittest discover -s scripts/tests
 
 The robot profile (`robot-arm64` job, as on the Pi) builds and tests `src/` only, on plain `ros:jazzy-ros-base`: `rosdep install --from-paths src --ignore-src -y`, then the build and test commands with `--base-paths src`.
 
+Shell on a Windows host, running commands in WSL, the devcontainer or `ros2`: read `docs/agents/windows-host.md`.
+
 CI has one required check, `ci`, which passes only when every other job passed. A new job joins it by being added to the `needs` of the `ci` job. Actions are pinned to full commit SHAs; Dependabot proposes updates. A new tool for the toolchain goes into `.devcontainer/Dockerfile`: a PR that changes `.devcontainer/` builds and tests against its own image.
 
 ## Agent skills
