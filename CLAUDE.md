@@ -30,8 +30,12 @@ source /opt/ros/jazzy/setup.bash
 # Build (CI adds ccache and -Werror)
 colcon build --base-paths src sim --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-# Test
-colcon test --base-paths src sim
+# Test (`build-test` job; skips the tests labelled `gazebo`)
+colcon test --base-paths src sim --ctest-args -LE gazebo
+colcon test-result --verbose
+
+# Headless Gazebo tests (`sim` job), about 1.5 min
+colcon test --base-paths src sim --packages-select stubentiger_sim --ctest-args -L gazebo
 colcon test-result --verbose
 
 # Static checks, after the build

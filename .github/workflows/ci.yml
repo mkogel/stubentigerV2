@@ -177,10 +177,11 @@ jobs:
             --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
               -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
               -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
-      - name: Test
+      - name: Test (the headless Gazebo tests run in the sim job)
         run: |
           source /opt/ros/jazzy/setup.bash
-          colcon test --base-paths src sim --event-handlers console_cohesion+
+          colcon test --base-paths src sim --event-handlers console_cohesion+ \
+            --ctest-args -LE gazebo
           colcon test-result --verbose
       - name: clang-tidy
         run: bash scripts/clang_tidy.sh
@@ -192,6 +193,38 @@ jobs:
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           python3 -m unittest discover -s scripts/tests
+
+  # The headless Gazebo tests (ctest label `gazebo`): server only, no GUI and no GPU. Sensors
+  # that render use EGL headless rendering, which falls back to Mesa's software renderer.
+  # Stays required: if it gets too slow, shrink the smoke set instead.
+  sim:
+    needs: image-manifest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ${{ needs.image-manifest.outputs.ref }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build --base-paths src sim --packages-up-to stubentiger_sim \
+            --event-handlers console_cohesion+
+      - name: Gazebo tests
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon test --base-paths src sim --packages-select stubentiger_sim \
+            --event-handlers console_cohesion+ --ctest-args -L gazebo
+          colcon test-result --verbose
 
   # The robot profile: src/ only, on a plain Jazzy base, as on the Pi. No Gazebo, no dev image.
   robot-arm64:
@@ -220,7 +253,7 @@ jobs:
 
   ci:
     if: always()
-    needs: [image-build, image-manifest, lint, build-test, robot-arm64]
+    needs: [image-build, image-manifest, lint, build-test, sim, robot-arm64]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

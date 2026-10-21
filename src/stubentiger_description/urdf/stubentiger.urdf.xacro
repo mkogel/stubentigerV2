@@ -1,0 +1,192 @@
+<?xml version="1.0"?>
+<!--
+  Stubentiger, minimal skeleton: a base box and each track as three floor wheels, the
+  middle one commanded and the outer two mimicking it. Values from #24 ("stubentiger_description"),
+  relative to base_footprint (the floor point under the middle floor wheels), x forward, y left.
+  Robot description replaces this with the full model (frames, gpio, meshes, backends).
+
+  Argument:
+    controllers_file  the controller YAML that gz_ros2_control loads; empty leaves the plugin out.
+-->
+<robot name="stubentiger" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="controllers_file" default=""/>
+
+  <!-- Geometry, in metres. -->
+  <xacro:property name="base_link_z" value="0.027"/>
+  <xacro:property name="wheel_radius" value="0.01966"/>
+  <xacro:property name="wheel_width" value="0.035"/>
+  <xacro:property name="wheel_y" value="0.095"/>
+  <xacro:property name="wheel_x_front" value="0.0615"/>
+  <xacro:property name="wheel_x_rear" value="-0.0615"/>
+  <xacro:property name="chassis_x_min" value="-0.0925"/>
+  <xacro:property name="chassis_x_max" value="0.1025"/>
+  <xacro:property name="chassis_width" value="0.139"/>
+  <xacro:property name="chassis_z_min" value="0.055"/>
+  <xacro:property name="chassis_z_max" value="0.118"/>
+
+  <!-- Mass: 2.2 kg in all, centre of mass at x -0.010, z 0.070 above the floor. -->
+  <xacro:property name="total_mass" value="2.2"/>
+  <xacro:property name="wheel_mass" value="0.05"/>
+  <xacro:property name="com_x" value="-0.010"/>
+  <xacro:property name="com_z" value="0.070"/>
+  <xacro:property name="chassis_mass" value="${total_mass - 6 * wheel_mass}"/>
+
+  <!-- Drive: the motor's no-load speed at the wheel; one side's stall torque over its 3 wheels.
+       Without an effort limit, DART's velocity servo has infinite torque. -->
+  <xacro:property name="wheel_velocity_limit" value="48.2"/>
+  <xacro:property name="stall_torque_per_side" value="0.54"/>
+  <xacro:property name="wheel_effort_limit" value="${stall_torque_per_side / 3}"/>
+
+  <!-- Wheel-floor friction. DART ignores kp/kd. fdir1 is the wheel axle (the collision
+       cylinder's z axis), so mu1 acts sideways and mu2 along the rolling direction. Turning on
+       the spot skids and reaches about 85 % of the commanded turn rate; lowering mu1 down to 0.1
+       did not change that in DART. Matching the real robot's turn rate is v0.2.0 work. -->
+  <xacro:property name="wheel_mu_sideways" value="1.0"/>
+  <xacro:property name="wheel_mu_rolling" value="1.0"/>
+
+  <!-- Chassis box, and its centre of mass placed so the whole robot's lands at (com_x, com_z). -->
+  <xacro:property name="chassis_length" value="${chassis_x_max - chassis_x_min}"/>
+  <xacro:property name="chassis_height" value="${chassis_z_max - chassis_z_min}"/>
+  <xacro:property name="chassis_x" value="${(chassis_x_max + chassis_x_min) / 2}"/>
+  <xacro:property name="chassis_z" value="${(chassis_z_max + chassis_z_min) / 2 - base_link_z}"/>
+  <xacro:property name="chassis_com_x" value="${total_mass * com_x / chassis_mass}"/>
+  <xacro:property name="chassis_com_z"
+    value="${(total_mass * com_z - 6 * wheel_mass * wheel_radius) / chassis_mass - base_link_z}"/>
+
+  <!-- Visual colours, so Gazebo and RViz2 don't draw the boxes black. -->
+  <material name="chassis">
+    <color rgba="0.9 0.5 0.1 1"/>
+  </material>
+  <material name="wheel">
+    <color rgba="0.15 0.15 0.15 1"/>
+  </material>
+
+  <link name="base_footprint"/>
+
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${base_link_z}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="${chassis_x} 0 ${chassis_z}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+      <material name="chassis"/>
+    </visual>
+    <collision>
+      <origin xyz="${chassis_x} 0 ${chassis_z}" rpy="0 0 0"/>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="${chassis_com_x} 0 ${chassis_com_z}" rpy="0 0 0"/>
+      <mass value="${chassis_mass}"/>
+      <inertia
+        ixx="${chassis_mass * (chassis_width**2 + chassis_height**2) / 12}" ixy="0" ixz="0"
+        iyy="${chassis_mass * (chassis_length**2 + chassis_height**2) / 12}" iyz="0"
+        izz="${chassis_mass * (chassis_length**2 + chassis_width**2) / 12}"/>
+    </inertial>
+  </link>
+
+  <!-- One floor wheel; mimic is the commanded joint it follows, or empty for a commanded one. -->
+  <xacro:macro name="floor_wheel" params="name x y mimic">
+    <joint name="${name}_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="${name}_link"/>
+      <origin xyz="${x} ${y} ${wheel_radius - base_link_z}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit effort="${wheel_effort_limit}" velocity="${wheel_velocity_limit}"/>
+      <xacro:if value="${mimic != ''}">
+        <mimic joint="${mimic}" multiplier="1" offset="0"/>
+      </xacro:if>
+    </joint>
+
+    <link name="${name}_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="${pi / 2} 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+        <material name="wheel"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="${pi / 2} 0 0"/>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="${wheel_mass}"/>
+        <inertia
+          ixx="${wheel_mass * (3 * wheel_radius**2 + wheel_width**2) / 12}" ixy="0" ixz="0"
+          iyy="${wheel_mass * wheel_radius**2 / 2}" iyz="0"
+          izz="${wheel_mass * (3 * wheel_radius**2 + wheel_width**2) / 12}"/>
+      </inertial>
+    </link>
+
+    <gazebo reference="${name}_link">
+      <mu1>${wheel_mu_sideways}</mu1>
+      <mu2>${wheel_mu_rolling}</mu2>
+      <fdir1>0 0 1</fdir1>
+    </gazebo>
+  </xacro:macro>
+
+  <!-- Middle wheel commanded; _2 in front of it, _3 behind it. -->
+  <xacro:macro name="track" params="side y">
+    <xacro:floor_wheel name="${side}_wheel" x="0" y="${y}" mimic=""/>
+    <xacro:floor_wheel name="${side}_wheel_2" x="${wheel_x_front}" y="${y}"
+      mimic="${side}_wheel_joint"/>
+    <xacro:floor_wheel name="${side}_wheel_3" x="${wheel_x_rear}" y="${y}"
+      mimic="${side}_wheel_joint"/>
+  </xacro:macro>
+
+  <xacro:track side="left" y="${wheel_y}"/>
+  <xacro:track side="right" y="${-wheel_y}"/>
+
+  <!-- Gazebo backend. The mimic joints are listed here only, with state interfaces:
+       GazeboSimSystem drives them after their commanded joint. -->
+  <ros2_control name="GazeboSimSystem" type="system">
+    <hardware>
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+    <xacro:macro name="wheel_interfaces" params="name commanded">
+      <joint name="${name}">
+        <xacro:if value="${commanded}">
+          <command_interface name="velocity"/>
+        </xacro:if>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+      </joint>
+    </xacro:macro>
+    <xacro:wheel_interfaces name="left_wheel_joint" commanded="true"/>
+    <xacro:wheel_interfaces name="left_wheel_2_joint" commanded="false"/>
+    <xacro:wheel_interfaces name="left_wheel_3_joint" commanded="false"/>
+    <xacro:wheel_interfaces name="right_wheel_joint" commanded="true"/>
+    <xacro:wheel_interfaces name="right_wheel_2_joint" commanded="false"/>
+    <xacro:wheel_interfaces name="right_wheel_3_joint" commanded="false"/>
+  </ros2_control>
+
+  <!-- The body's true pose in the world, on Gazebo's /model/stubentiger/pose. Tests judge
+       driving on it, never on /odom, which would hide wheel slip. -->
+  <gazebo>
+    <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+      <publish_model_pose>true</publish_model_pose>
+      <publish_link_pose>false</publish_link_pose>
+      <use_pose_vector_msg>false</use_pose_vector_msg>
+      <update_frequency>100</update_frequency>
+    </plugin>
+  </gazebo>
+
+  <xacro:if value="${'$(arg controllers_file)' != ''}">
+    <gazebo>
+      <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+        <parameters>$(arg controllers_file)</parameters>
+      </plugin>
+    </gazebo>
+  </xacro:if>
+</robot>
