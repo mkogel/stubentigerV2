@@ -1,0 +1,6 @@
+# game_controller_node (joy): SDL's game-controller mapping, so the button and axis indices
+# don't depend on the driver. Dev laptop setup confirmed them on the real receiver (#27).
+game_controller_node:
+  ros__parameters:
+    autorepeat_rate: 20.0 # Hz: a held stick keeps /joy alive, so the cmd_vel timeout stays off
+    deadzone: 0.05

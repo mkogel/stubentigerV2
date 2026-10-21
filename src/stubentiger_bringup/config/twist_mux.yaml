@@ -1,0 +1,13 @@
+# twist_mux: the one entry for every velocity source into diff_drive_controller.
+# One input today. /cmd_vel_nav, /cmd_vel_follow and the lock /e_stop are reserved names,
+# configured in their milestones. There is never an assistant input (ADR-0002).
+# twist_mux sends no zeros on timeout: the stop on /joy loss is diff_drive_controller's
+# cmd_vel_timeout.
+twist_mux:
+  ros__parameters:
+    use_stamped: true
+    topics:
+      teleop:
+        topic: /cmd_vel_teleop
+        timeout: 0.5
+        priority: 10
