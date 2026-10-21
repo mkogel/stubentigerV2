@@ -11,6 +11,8 @@
     // WSLg GPU passthrough.
     "--device=/dev/dxg"
   ],
+  // Fails early with a hint instead of Docker's "bind source path does not exist".
+  "initializeCommand": "test -d /dev/input || { echo '/dev/input is missing: see docs/dev-setup.md, step 8.' >&2; exit 1; }",
   "mounts": [
     "source=/dev/input,target=/dev/input,type=bind",
     "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",

@@ -88,6 +88,8 @@ usbipd bind --busid <BUSID>          # once per device
 usbipd attach --wsl --busid <BUSID>  # after every replug or WSL restart
 ```
 
+Open a new PowerShell window after the install, or `usbipd` is not found. If `bind` reports that Windows' driver holds the receiver, run `usbipd bind --busid <BUSID> --force`.
+
 `usbipd attach --wsl --busid <BUSID> --auto-attach` keeps it attached across replugs while the window stays open.
 
 Check, in the distro: `lsusb` lists the Microsoft Xbox 360 receiver.
@@ -97,7 +99,7 @@ Check, in the distro: `lsusb` lists the Microsoft Xbox 360 receiver.
 The stock WSL kernel has no joystick drivers. Build Microsoft's kernel for the running version with `CONFIG_INPUT_JOYSTICK=y` and `CONFIG_JOYSTICK_XPAD=m`:
 
 ```bash
-sudo apt-get install -y build-essential flex bison dwarves libssl-dev libelf-dev bc cpio python3 git
+sudo apt-get install -y build-essential flex bison dwarves libssl-dev libelf-dev bc cpio python3 git qemu-utils
 version=$(uname -r | sed 's/-microsoft.*//')
 git clone --depth 1 --branch "linux-msft-wsl-$version" \
   https://github.com/microsoft/WSL2-Linux-Kernel.git ~/wsl-kernel
@@ -112,15 +114,28 @@ mkdir -p /mnt/c/wsl && cp arch/x86/boot/bzImage /mnt/c/wsl/bzImage
 echo xpad | sudo tee /etc/modules-load.d/xpad.conf
 ```
 
-Point WSL at the new kernel in `%UserProfile%\.wslconfig`, under `[wsl2]`:
+The kernel loads modules on demand from WSL's own system, not from the distro, so pack them into a modules disk as well. Without it, Docker fails to start (`Extension addrtype revision 0 not supported`):
+
+```bash
+release=$(make -s kernelrelease)
+rm -rf ~/wsl-artifacts && mkdir -p ~/wsl-artifacts/perf
+make INSTALL_MOD_STRIP=1 INSTALL_MOD_PATH="$HOME/wsl-artifacts/modules" modules_install
+make headers_install INSTALL_HDR_PATH="$HOME/wsl-artifacts/headers"
+./Microsoft/scripts/gen_artifacts_vhdx.sh ~/wsl-artifacts/modules ~/wsl-artifacts/headers \
+  ~/wsl-artifacts/perf "$release" ~/wsl-artifacts/modules.vhdx
+cp ~/wsl-artifacts/modules.vhdx /mnt/c/wsl/modules.vhdx
+```
+
+Point WSL at the new kernel and its modules in `%UserProfile%\.wslconfig`, under `[wsl2]`:
 
 ```ini
 kernel=C:\\wsl\\bzImage
+kernelModules=C:\\wsl\\modules.vhdx
 ```
 
 **PowerShell:** `wsl --shutdown`, reopen the distro, and attach the receiver again (step 6).
 
-Check: `uname -v` shows today's build date, `lsmod | grep xpad` lists the module, and `ls /dev/input/` shows `js0` and an `event*` device once the controller is on.
+Check: `uname -v` shows today's build date, `lsmod | grep xpad` lists the module, `docker run --rm hello-world` prints "Hello from Docker!", and `ls /dev/input/` shows `js0` and an `event*` device once the controller is on. The ring keeps blinking even when connected: this kernel has no LED support (#35).
 
 When `wsl --update` moves WSL to a new kernel line, repeat this step for the new version.
 
@@ -134,7 +149,14 @@ echo 'SUBSYSTEM=="input", KERNEL=="event*|js*", MODE="0666"' \
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
-Check: `ls -l /dev/input/js0` shows `crw-rw-rw-`.
+The kernel creates `/dev/input` only while the controller is connected, and removes it again when the controller drops. The container then won't start without the controller, and a running container loses it after a reconnect. Create the folder at every boot so it always exists:
+
+```bash
+echo 'd /dev/input 0755 root root -' | sudo tee /etc/tmpfiles.d/dev-input.conf
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/dev-input.conf
+```
+
+Check: `ls -ld /dev/input` works with the controller off, and `ls -l /dev/input/js0` shows `crw-rw-rw-` with it on.
 
 ## 9. Open the devcontainer and build
 
