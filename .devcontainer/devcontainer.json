@@ -27,7 +27,11 @@
     "LD_LIBRARY_PATH": "/usr/lib/wsl/lib",
     // Mesa renders through d3d12 on the NVIDIA adapter, not the integrated GPU.
     "GALLIUM_DRIVER": "d3d12",
-    "MESA_D3D12_DEFAULT_ADAPTER_NAME": "NVIDIA"
+    "MESA_D3D12_DEFAULT_ADAPTER_NAME": "NVIDIA",
+    // Host networking on WSL's mirrored networking loses fragmented UDP, so ROS messages
+    // larger than one packet (the robot description) never arrive. LARGE_DATA sends data
+    // over shared memory locally and TCP to other machines.
+    "FASTDDS_BUILTIN_TRANSPORTS": "LARGE_DATA"
   },
   // The Claude Code CLI comes only through this feature, never the image.
   "features": {

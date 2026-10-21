@@ -169,6 +169,8 @@ code ~/stubentigerV2
 
 In VS Code (with the WSL and Dev Containers extensions), run **Dev Containers: Reopen in Container**. The container runs as `ubuntu`, gets the Claude Code CLI from its devcontainer feature, and installs the pre-commit hook.
 
+The devcontainer also sets `FASTDDS_BUILTIN_TRANSPORTS=LARGE_DATA`. With host networking on WSL's mirrored networking, ROS messages split across several UDP packets get lost: small topics like `/joy` work, but the robot description never arrives and Gazebo never spawns the robot. `LARGE_DATA` sends data over shared memory inside the laptop and over TCP to other machines. A terminal opened outside the devcontainer (for example `docker exec` into a plain dev-image container) needs `export FASTDDS_BUILTIN_TRANSPORTS=LARGE_DATA` too.
+
 Check, in the container: the build, test and lint commands from `CLAUDE.md` ("Build and test") all pass.
 
 ## 10. Run Gazebo Harmonic on WSLg
