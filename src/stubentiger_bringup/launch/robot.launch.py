@@ -3,7 +3,8 @@
 hardware:=mock (CI) and later hardware:=real (the Pi) start ros2_control_node and the gpio
 broadcaster. With hardware:=gazebo the controller manager runs inside the Gazebo process
 (gz_ros2_control), so the sim launch starts Gazebo, spawns the robot and includes this with
-use_sim_time:=true; Gazebo has no gpio. Everything else is the same on every backend.
+use_sim_time:=true; Gazebo has no gpio. sensors:=true adds the sim sensors to the model, for
+Gazebo only. Everything else is the same on every backend.
 
 Teleop chain, TwistStamped end to end with no relay node (#24, "Teleop chain"):
 /joy → teleop_twist_joy → /cmd_vel_teleop → twist_mux → /diff_drive_controller/cmd_vel.
@@ -27,6 +28,7 @@ from launch_ros.substitutions import FindPackageShare
 
 def generate_launch_description() -> LaunchDescription:
     hardware = LaunchConfiguration("hardware")
+    sensors = LaunchConfiguration("sensors")
     use_sim_time = ParameterValue(LaunchConfiguration("use_sim_time"), value_type=bool)
     not_on_gazebo = UnlessCondition(EqualsSubstitution(hardware, "gazebo"))
 
@@ -39,7 +41,16 @@ def generate_launch_description() -> LaunchDescription:
     )
     robot_description = ParameterValue(
         Command(
-            ["xacro ", xacro_file, " hardware:=", hardware, " controllers_file:=", controllers]
+            [
+                "xacro ",
+                xacro_file,
+                " hardware:=",
+                hardware,
+                " sensors:=",
+                sensors,
+                " controllers_file:=",
+                controllers,
+            ]
         ),
         value_type=str,
     )
@@ -109,6 +120,11 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "use_sim_time", default_value="false", description="Use /clock (Gazebo)"
+            ),
+            DeclareLaunchArgument(
+                "sensors",
+                default_value="false",
+                description="Add the sim LiDAR, IMU and camera to the model (gazebo only)",
             ),
             robot_state_publisher,
             ros2_control_node,
