@@ -156,7 +156,14 @@ echo 'd /dev/input 0755 root root -' | sudo tee /etc/tmpfiles.d/dev-input.conf
 sudo systemd-tmpfiles --create /etc/tmpfiles.d/dev-input.conf
 ```
 
-Check: `ls -ld /dev/input` works with the controller off, and `ls -l /dev/input/js0` shows `crw-rw-rw-` with it on.
+The kernel still deletes the folder once its last device is gone, and makes a new one when the controller is back. The container's mount keeps pointing at the deleted folder and never sees the controller again. A file in the folder keeps it from ever being empty:
+
+```bash
+echo 'f /dev/input/.keep 0644 root root -' | sudo tee -a /etc/tmpfiles.d/dev-input.conf
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/dev-input.conf
+```
+
+Check: `ls -ld /dev/input` works with the controller off, `ls -l /dev/input/js0` shows `crw-rw-rw-` with it on, and `stat -c %i /dev/input` prints the same number before and after switching the controller off and on.
 
 ## 9. Open the devcontainer and build
 
@@ -196,7 +203,7 @@ With the receiver attached (step 6) and the controller on, in the container:
 
 ```bash
 ros2 run joy game_controller_node      # terminal 1
-ros2 topic echo /joy                    # terminal 2
+ros2 topic echo --no-daemon /joy sensor_msgs/msg/Joy   # terminal 2
 ```
 
 Check against the SDL game-controller layout that the Teleop config uses, and record any index that differs:
@@ -208,6 +215,10 @@ Check against the SDL game-controller layout that the Teleop config uses, and re
 | Left stick Y (speed) | `axes[1]` |
 | Right stick X (turn) | `axes[2]` |
 
+With mirrored networking, a `ros2` command that asks the ROS 2 daemon hangs without output when no daemon runs: a connection to an unused localhost port is never refused. `--no-daemon` and the message type skip it.
+
+Switch the controller off and on again: terminal 2 goes quiet, then shows `/joy` again without restarting terminal 1. The devcontainer sets `SDL_JOYSTICK_DISABLE_UDEV=1` for this, since no udev runs in the container.
+
 ## 12. Protect `main`
 
 On GitHub: repo Settings → Branches → Add branch protection rule (or a ruleset) for `main`:
@@ -217,3 +228,11 @@ On GitHub: repo Settings → Branches → Add branch protection rule (or a rules
 - Do not allow bypassing the settings.
 
 Check: an open PR shows `ci` as "Required".
+
+## 13. Install Foxglove
+
+Foxglove shows the robot's topics like RViz2 does, over the WebSocket of the `foxglove_bridge` that every launch starts. The same connection later reaches the Pi.
+
+On Windows, install the desktop app from foxglove.dev/download, or use app.foxglove.dev in Chrome or Edge. Both may ask you to sign in with a free account.
+
+Check: with the sim running, **Open connection → Foxglove WebSocket → `ws://localhost:8765`**, add a 3D panel with the display frame `odom`, and drive. The TF frames move. The robot body itself does not show yet: Foxglove does not load the meshes.

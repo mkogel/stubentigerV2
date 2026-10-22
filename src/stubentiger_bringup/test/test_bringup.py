@@ -2,7 +2,8 @@
 
 The common launch brings up every node of the Teleop stack, all controllers become active,
 including the gpio broadcaster, and the stack publishes /gpio_states, /odom and the
-odom → base_footprint transform.
+odom → base_footprint transform. game_controller_node runs with a deadzone wide enough for a
+worn stick.
 """
 
 import time
@@ -20,6 +21,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
 from nav_msgs.msg import Odometry
+from rcl_interfaces.srv import GetParameters
 from rclpy.node import Node as RclpyNode
 from tf2_msgs.msg import TFMessage
 
@@ -47,6 +49,10 @@ GPIO_STATES = (
     "protocol_minor",
     "reset_cause",
 )
+# The real Xbox 360 controller's sticks rest up to this far off centre after a release, measured
+# in the Virtual MVP checklist run (#32). The joy deadzone must cover it, or a held Dead-man button
+# drives with the sticks let go.
+WORST_STICK_REST = 0.16
 
 # Guards on waiting, not bounds under test.
 STARTUP_TIMEOUT = 60.0
@@ -140,3 +146,18 @@ class TestBringup(unittest.TestCase):
 
         self.assertEqual(received[-1].header.frame_id, "odom")
         self.assertEqual(received[-1].child_frame_id, "base_footprint")
+
+    def test_joy_deadzone_covers_a_worn_stick(self) -> None:
+        # The behaviour tests publish /joy themselves, past game_controller_node, so the deadzone
+        # is checked on the running node.
+        client = self.node.create_client(GetParameters, "/game_controller_node/get_parameters")
+        try:
+            self.assertTrue(client.wait_for_service(timeout_sec=STARTUP_TIMEOUT))
+            future = client.call_async(GetParameters.Request(names=["deadzone"]))
+            rclpy.spin_until_future_complete(self.node, future, timeout_sec=SERVICE_CALL_TIMEOUT)
+            response = future.result()
+        finally:
+            self.node.destroy_client(client)
+
+        assert response is not None, "no answer from game_controller_node"
+        self.assertGreater(response.values[0].double_value, WORST_STICK_REST)

@@ -62,11 +62,17 @@ All commands run in the **VS Code container terminal** (`ubuntu@…`) unless a s
 
    Pass: all five behave as described.
 
-5. **No creep.** Note the robot's position (`ros2 topic echo --once /odom --field pose.pose.position`). Hold LB with your thumbs off the sticks for 10 s, then read the position again. Pass: the robot did not move and the position is unchanged. Record any difference.
+5. **No creep.** Note the robot's position:
+
+   ```bash
+   ros2 topic echo --once --no-daemon /odom nav_msgs/msg/Odometry --field pose.pose.position
+   ```
+
+   `--no-daemon` and the type keep it from hanging on mirrored networking ([`docs/agents/windows-host.md`](../agents/windows-host.md), "`ros2` CLI"). Hold LB with your thumbs off the sticks for 10 s, then read the position again. Pass: the robot did not move and the position is unchanged. Record any difference.
 
 6. **Controller off while driving.** Hold LB, drive forward, and switch the controller off (hold the Guide button until the ring goes dark) while still driving. Pass: the robot stops within about 0.8 s, well under a second. Switch the controller back on, hold LB: it drives again without any other step.
 
-7. **RViz2 and Foxglove show the motion.** In Foxglove (desktop app or the browser), open a connection to `ws://localhost:8765` and add a 3D panel. Drive the robot. Pass: RViz2 and Foxglove both show the robot moving and turning.
+7. **RViz2 and Foxglove show the motion.** In Foxglove (desktop app or the browser, [`docs/dev-setup.md`](../dev-setup.md) step 13), open a connection to `ws://localhost:8765` and add a 3D panel. Drive the robot. Pass: RViz2 and Foxglove both show the robot moving and turning.
 
 8. **Real-time factor with the robot.** Drive for a minute with the Gazebo GUI open and read the real-time factor in its bottom-right corner. Record it. A value far below 1 is recorded as a finding for a new decision (dual-boot), not a failed item.
 
