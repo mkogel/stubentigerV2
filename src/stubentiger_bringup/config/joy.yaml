@@ -3,4 +3,6 @@
 game_controller_node:
   ros__parameters:
     autorepeat_rate: 20.0 # Hz: a held stick keeps /joy alive, so the cmd_vel timeout stays off
-    deadzone: 0.05
+    # A worn Xbox 360 stick rests up to 0.16 off centre (#32); 0.25 is Microsoft's XInput value.
+    # Outside it the axis is rescaled, so full stick still reaches full speed.
+    deadzone: 0.25

@@ -31,7 +31,10 @@
     // Host networking on WSL's mirrored networking loses fragmented UDP, so ROS messages
     // larger than one packet (the robot description) never arrive. LARGE_DATA sends data
     // over shared memory locally and TCP to other machines.
-    "FASTDDS_BUILTIN_TRANSPORTS": "LARGE_DATA"
+    "FASTDDS_BUILTIN_TRANSPORTS": "LARGE_DATA",
+    // No udev runs in the container, so SDL never hears that the controller came back after it
+    // was switched off. Without udev, SDL watches /dev/input itself and finds it again.
+    "SDL_JOYSTICK_DISABLE_UDEV": "1"
   },
   // The Claude Code CLI comes only through this feature, never the image.
   "features": {

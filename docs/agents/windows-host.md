@@ -33,7 +33,7 @@ The devcontainer workspace is Max's own WSL clone, often on another branch: leav
 
 ## `ros2` CLI
 
-Wrap every `ros2` CLI call in `timeout` (`timeout 15 ros2 topic list`). The CLI talks to the ROS 2 daemon at `127.0.0.1:11511`, and when that daemon is stuck, a call waits forever or fails after about two minutes with `Connection timed out`.
+Wrap every `ros2` CLI call in `timeout` (`timeout 15 ros2 topic list`). The CLI talks to the ROS 2 daemon at `127.0.0.1:11511`, and when that daemon is stuck, a call waits forever or fails after about two minutes with `Connection timed out`. With mirrored networking the same happens when no daemon runs at all: a connection to an unused localhost port is never refused, it just hangs.
 
 When a call hangs or times out:
 
